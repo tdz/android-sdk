@@ -51,7 +51,7 @@
 /** SENSOR IDS AND NAMES
  **/
 
-#define MAX_NUM_SENSORS 4
+#define MAX_NUM_SENSORS 5
 
 #define SUPPORTED_SENSORS  ((1<<MAX_NUM_SENSORS)-1)
 
@@ -60,19 +60,22 @@
 #define  ID_MAGNETIC_FIELD (ID_BASE+1)
 #define  ID_ORIENTATION    (ID_BASE+2)
 #define  ID_TEMPERATURE    (ID_BASE+3)
+#define  ID_PROXIMITY      (ID_BASE+4)
 
 #define  SENSORS_ACCELERATION   (1 << ID_ACCELERATION)
 #define  SENSORS_MAGNETIC_FIELD  (1 << ID_MAGNETIC_FIELD)
 #define  SENSORS_ORIENTATION     (1 << ID_ORIENTATION)
 #define  SENSORS_TEMPERATURE     (1 << ID_TEMPERATURE)
+#define  SENSORS_PROXIMITY       (1 << ID_PROXIMITY)
 
-#define  ID_CHECK(x)  ((unsigned)((x)-ID_BASE) < 4)
+#define  ID_CHECK(x)  ((unsigned)((x)-ID_BASE) < MAX_NUM_SENSORS)
 
 #define  SENSORS_LIST  \
     SENSOR_(ACCELERATION,"acceleration") \
     SENSOR_(MAGNETIC_FIELD,"magnetic-field") \
     SENSOR_(ORIENTATION,"orientation") \
     SENSOR_(TEMPERATURE,"temperature") \
+    SENSOR_(PROXIMITY,"proximity") \
 
 static const struct {
     const char*  name;
@@ -108,26 +111,31 @@ _sensorIdFromName( const char*  name )
     return -1;
 }
 
-/** SENSORS CONTROL DEVICE
+/** SENSORS POLL DEVICE
  **
- ** This one is used to send commands to the sensors drivers.
- ** We implement this by sending directly commands to the emulator
- ** through the QEMUD channel.
+ ** This one is used to read sensor data from the hardware.
+ ** We implement this by simply reading the data from the
+ ** emulator through the QEMUD channel.
  **/
 
-typedef struct SensorControl {
-    struct sensors_control_device_t  device;
-    int                              fd;
-    uint32_t                         active_sensors;
-} SensorControl;
+typedef struct SensorPoll {
+    struct sensors_poll_device_t  device;
+    sensors_event_t               sensors[MAX_NUM_SENSORS];
+    int                           events_fd;
+    uint32_t                      pendingSensors;
+    int64_t                       timeStart;
+    int64_t                       timeOffset;
+    int                           fd;
+    uint32_t                      active_sensors;
+} SensorPoll;
 
 /* this must return a file descriptor that will be used to read
  * the sensors data (it is passed to data__data_open() below
  */
 static native_handle_t*
-control__open_data_source(struct sensors_control_device_t *dev)
+control__open_data_source(struct sensors_poll_device_t *dev)
 {
-    SensorControl*  ctl = (void*)dev;
+    SensorPoll*  ctl = (void*)dev;
     native_handle_t* handle;
 
     if (ctl->fd < 0) {
@@ -140,11 +148,11 @@ control__open_data_source(struct sensors_control_device_t *dev)
 }
 
 static int
-control__activate(struct sensors_control_device_t *dev,
+control__activate(struct sensors_poll_device_t *dev,
                   int handle,
                   int enabled)
 {
-    SensorControl*  ctl = (void*)dev;
+    SensorPoll*     ctl = (void*)dev;
     uint32_t        mask, sensors, active, new_sensors, changed;
     char            command[128];
     int             ret;
@@ -185,9 +193,9 @@ control__activate(struct sensors_control_device_t *dev,
 }
 
 static int
-control__set_delay(struct sensors_control_device_t *dev, int32_t ms)
+control__set_delay(struct sensors_poll_device_t *dev, int32_t ms)
 {
-    SensorControl*  ctl = (void*)dev;
+    SensorPoll*     ctl = (void*)dev;
     char            command[128];
 
     D("%s: dev=%p delay-ms=%d", __FUNCTION__, dev, ms);
@@ -197,45 +205,14 @@ control__set_delay(struct sensors_control_device_t *dev, int32_t ms)
     return qemud_channel_send(ctl->fd, command, -1);
 }
 
-/* this function is used to force-stop the blocking read() in
- * data__poll. In order to keep the implementation as simple
- * as possible here, we send a command to the emulator which
- * shall send back an appropriate data block to the system.
- */
-static int
-control__wake(struct sensors_control_device_t *dev)
-{
-    SensorControl*  ctl = (void*)dev;
-    D("%s: dev=%p", __FUNCTION__, dev);
-    return qemud_channel_send(ctl->fd, "wake", -1);
-}
-
-
 static int
 control__close(struct hw_device_t *dev) 
 {
-    SensorControl*  ctl = (void*)dev;
+    SensorPoll*  ctl = (void*)dev;
     close(ctl->fd);
     free(ctl);
     return 0;
 }
-
-/** SENSORS DATA DEVICE
- **
- ** This one is used to read sensor data from the hardware.
- ** We implement this by simply reading the data from the
- ** emulator through the QEMUD channel.
- **/
-
-
-typedef struct SensorData {
-    struct sensors_data_device_t  device;
-    sensors_data_t                sensors[MAX_NUM_SENSORS];
-    int                           events_fd;
-    uint32_t                      pendingSensors;
-    int64_t                       timeStart;
-    int64_t                       timeOffset;
-} SensorData;
 
 /* return the current time in nanoseconds */
 static int64_t
@@ -249,15 +226,15 @@ data__now_ns(void)
 }
 
 static int
-data__data_open(struct sensors_data_device_t *dev, native_handle_t* handle)
+data__data_open(struct sensors_poll_device_t *dev, native_handle_t* handle)
 {
-    SensorData*  data = (void*)dev;
+    SensorPoll*  data = (void*)dev;
     int i;
     D("%s: dev=%p fd=%d", __FUNCTION__, dev, handle->data[0]);
     memset(&data->sensors, 0, sizeof(data->sensors));
 
     for (i=0 ; i<MAX_NUM_SENSORS ; i++) {
-        data->sensors[i].vector.status = SENSOR_STATUS_ACCURACY_HIGH;
+        data->sensors[i].acceleration.status = SENSOR_STATUS_ACCURACY_HIGH;
     }
     data->pendingSensors = 0;
     data->timeStart      = 0;
@@ -271,11 +248,11 @@ data__data_open(struct sensors_data_device_t *dev, native_handle_t* handle)
 }
 
 static int
-data__data_close(struct sensors_data_device_t *dev)
+data__data_close(struct sensors_poll_device_t *dev)
 {
-    SensorData*  data = (void*)dev;
+    SensorPoll*  data = (void*)dev;
     D("%s: dev=%p", __FUNCTION__, dev);
-    if (data->events_fd > 0) {
+    if (data->events_fd >= 0) {
         close(data->events_fd);
         data->events_fd = -1;
     }
@@ -283,8 +260,8 @@ data__data_close(struct sensors_data_device_t *dev)
 }
 
 static int
-pick_sensor(SensorData*      data,
-            sensors_data_t*  values)
+pick_sensor(SensorPoll*       data,
+            sensors_event_t*  values)
 {
     uint32_t mask = SUPPORTED_SENSORS;
     while (mask) {
@@ -293,12 +270,14 @@ pick_sensor(SensorData*      data,
         if (data->pendingSensors & (1<<i)) {
             data->pendingSensors &= ~(1<<i);
             *values = data->sensors[i];
-            values->sensor = (1<<i);
+            values->sensor = i;
+            values->version = sizeof(*values);
+
             D("%s: %d [%f, %f, %f]", __FUNCTION__,
-                    (1<<i),
-                    values->vector.x,
-                    values->vector.y,
-                    values->vector.z);
+                    i,
+                    values->data[0],
+                    values->data[1],
+                    values->data[2]);
             return i;
         }
     }
@@ -309,9 +288,9 @@ pick_sensor(SensorData*      data,
 }
 
 static int
-data__poll(struct sensors_data_device_t *dev, sensors_data_t* values)
+data__poll(struct sensors_poll_device_t *dev, sensors_event_t* values)
 {
-    SensorData*  data = (void*)dev;
+    SensorPoll*  data = (void*)dev;
     int fd = data->events_fd;
 
     D("%s: data=%p", __FUNCTION__, dev);
@@ -338,10 +317,7 @@ data__poll(struct sensors_data_device_t *dev, sensors_data_t* values)
 
         buff[len] = 0;
 
-        /* "wake" is sent from the emulator to exit this loop. This shall
-         * really be because another thread called "control__wake" in this
-         * process.
-         */
+        /* "wake" is sent from the emulator to exit this loop. */
         if (!strcmp((const char*)data, "wake")) {
             return 0x7FFFFFFF;
         }
@@ -364,8 +340,8 @@ data__poll(struct sensors_data_device_t *dev, sensors_data_t* values)
             continue;
         }
 
-        /* "magnetic:<x>:<y>:<z>" is sent for the params of the magnetic field */
-        if (sscanf(buff, "magnetic:%g:%g:%g", params+0, params+1, params+2) == 3) {
+        /* "magnetic-field:<x>:<y>:<z>" is sent for the params of the magnetic field */
+        if (sscanf(buff, "magnetic-field:%g:%g:%g", params+0, params+1, params+2) == 3) {
             new_sensors |= SENSORS_MAGNETIC_FIELD;
             data->sensors[ID_MAGNETIC_FIELD].magnetic.x = params[0];
             data->sensors[ID_MAGNETIC_FIELD].magnetic.y = params[1];
@@ -377,6 +353,13 @@ data__poll(struct sensors_data_device_t *dev, sensors_data_t* values)
         if (sscanf(buff, "temperature:%g", params+0) == 2) {
             new_sensors |= SENSORS_TEMPERATURE;
             data->sensors[ID_TEMPERATURE].temperature = params[0];
+            continue;
+        }
+
+        /* "proximity:<value>" */
+        if (sscanf(buff, "proximity:%g", params+0) == 1) {
+            new_sensors |= SENSORS_PROXIMITY;
+            data->sensors[ID_PROXIMITY].distance = params[0];
             continue;
         }
 
@@ -400,7 +383,7 @@ data__poll(struct sensors_data_device_t *dev, sensors_data_t* values)
                 while (new_sensors) {
                     uint32_t i = 31 - __builtin_clz(new_sensors);
                     new_sensors &= ~(1<<i);
-                    data->sensors[i].time = t;
+                    data->sensors[i].timestamp = t;
                 }
                 return pick_sensor(data, values);
             } else {
@@ -410,14 +393,15 @@ data__poll(struct sensors_data_device_t *dev, sensors_data_t* values)
         }
         D("huh ? unsupported command");
     }
+    return -1;
 }
 
 static int
 data__close(struct hw_device_t *dev) 
 {
-    SensorData* data = (SensorData*)dev;
+    SensorPoll* data = (SensorPoll*)dev;
     if (data) {
-        if (data->events_fd > 0) {
+        if (data->events_fd >= 0) {
             //LOGD("(device close) about to close fd=%d", data->events_fd);
             close(data->events_fd);
         }
@@ -426,6 +410,65 @@ data__close(struct hw_device_t *dev)
     return 0;
 }
 
+/** SENSORS POLL DEVICE FUNCTIONS **/
+
+static int poll__close(struct hw_device_t* dev)
+{
+    SensorPoll*  ctl = (void*)dev;
+    close(ctl->fd);
+    if (ctl->fd >= 0) {
+        close(ctl->fd);
+    }
+    if (ctl->events_fd >= 0) {
+        close(ctl->events_fd);
+    }
+    free(ctl);
+    return 0;
+}
+
+static int poll__poll(struct sensors_poll_device_t *dev,
+            sensors_event_t* data, int count)
+{
+    SensorPoll*  datadev = (void*)dev;
+    int ret;
+    int i;
+    D("%s: dev=%p data=%p count=%d ", __FUNCTION__, dev, data, count);
+
+    for (i = 0; i < count; i++)  {
+        ret = data__poll(dev, data);
+        data++;
+        if (ret > MAX_NUM_SENSORS || ret < 0) {
+           return i;
+        }
+        if (!datadev->pendingSensors) {
+           return i + 1;
+        }
+    }
+    return count;
+}
+
+static int poll__activate(struct sensors_poll_device_t *dev,
+            int handle, int enabled)
+{
+    int ret;
+    native_handle_t* hdl;
+    SensorPoll*  ctl = (void*)dev;
+    D("%s: dev=%p handle=%x enable=%d ", __FUNCTION__, dev, handle, enabled);
+    if (ctl->fd < 0) {
+        D("%s: OPEN CTRL and DATA ", __FUNCTION__);
+        hdl = control__open_data_source(dev);
+        ret = data__data_open(dev,hdl);
+    }
+    ret = control__activate(dev, handle, enabled);
+    return ret;
+}
+
+static int poll__setDelay(struct sensors_poll_device_t *dev,
+            int handle, int64_t ns)
+{
+    // TODO
+    return 0;
+}
 
 /** MODULE REGISTRATION SUPPORT
  **
@@ -486,11 +529,22 @@ static const struct sensor_t sSensorListInit[] = {
           .power      = 0.0f,
           .reserved   = {}
         },
+
+        { .name       = "Goldfish Proximity sensor",
+          .vendor     = "The Android Open Source Project",
+          .version    = 1,
+          .handle     = ID_PROXIMITY,
+          .type       = SENSOR_TYPE_PROXIMITY,
+          .maxRange   = 1.0f,
+          .resolution = 1.0f,
+          .power      = 20.0f,
+          .reserved   = {}
+        },
 };
 
 static struct sensor_t  sSensorList[MAX_NUM_SENSORS];
 
-static uint32_t sensors__get_sensors_list(struct sensors_module_t* module,
+static int sensors__get_sensors_list(struct sensors_module_t* module,
         struct sensor_t const** list) 
 {
     int  fd = qemud_channel_open(SENSORS_SERVICE_NAME);
@@ -543,38 +597,20 @@ open_sensors(const struct hw_module_t* module,
 
     D("%s: name=%s", __FUNCTION__, name);
 
-    if (!strcmp(name, SENSORS_HARDWARE_CONTROL))
-    {
-        SensorControl *dev = malloc(sizeof(*dev));
-
-        memset(dev, 0, sizeof(*dev));
-
-        dev->device.common.tag       = HARDWARE_DEVICE_TAG;
-        dev->device.common.version   = 0;
-        dev->device.common.module    = (struct hw_module_t*) module;
-        dev->device.common.close     = control__close;
-        dev->device.open_data_source = control__open_data_source;
-        dev->device.activate         = control__activate;
-        dev->device.set_delay        = control__set_delay;
-        dev->device.wake             = control__wake;
-        dev->fd                      = -1;
-
-        *device = &dev->device.common;
-        status  = 0;
-    }
-    else if (!strcmp(name, SENSORS_HARDWARE_DATA)) {
-        SensorData *dev = malloc(sizeof(*dev));
+    if (!strcmp(name, SENSORS_HARDWARE_POLL)) {
+        SensorPoll *dev = malloc(sizeof(*dev));
 
         memset(dev, 0, sizeof(*dev));
 
         dev->device.common.tag     = HARDWARE_DEVICE_TAG;
         dev->device.common.version = 0;
         dev->device.common.module  = (struct hw_module_t*) module;
-        dev->device.common.close   = data__close;
-        dev->device.data_open      = data__data_open;
-        dev->device.data_close     = data__data_close;
-        dev->device.poll           = data__poll;
+        dev->device.common.close   = poll__close;
+        dev->device.poll           = poll__poll;
+        dev->device.activate       = poll__activate;
+        dev->device.setDelay       = poll__setDelay;
         dev->events_fd             = -1;
+        dev->fd                    = -1;
 
         *device = &dev->device.common;
         status  = 0;
