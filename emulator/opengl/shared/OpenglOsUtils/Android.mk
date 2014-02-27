@@ -27,12 +27,16 @@ ifeq ($(HOST_OS),linux)
     host_common_LDLIBS += -lpthread -lrt -lX11
 endif
 
+ifneq ($(shell uname -m), x86_64)
+
 ### 32-bit host library ####
 $(call emugl-begin-host-static-library,libOpenglOsUtils)
     $(call emugl-export,C_INCLUDES,$(LOCAL_PATH))
     LOCAL_SRC_FILES = $(host_common_SRC_FILES)
     $(call emugl-export,LDLIBS,$(host_common_LDLIBS))
 $(call emugl-end-module)
+
+else # x86_64
 
 ### 64-bit host library ####
 $(call emugl-begin-host-static-library,lib64OpenglOsUtils)
@@ -41,3 +45,5 @@ $(call emugl-begin-host-static-library,lib64OpenglOsUtils)
     $(call emugl-export,LDLIBS,$(host_common_LDLIBS))
     $(call emugl-export,CFLAGS,-m64)
 $(call emugl-end-module)
+
+endif

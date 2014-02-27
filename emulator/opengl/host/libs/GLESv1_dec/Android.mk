@@ -6,6 +6,7 @@ host_common_debug_CFLAGS :=
 #host_common_debug_CFLAGS += -DCHECK_GL_ERROR
 #host_common_debug_CFLAGS += -DDEBUG_PRINTOUT
 
+ifneq ($(shell uname -m), x86_64)
 
 ### host library #########################################
 $(call emugl-begin-host-static-library,libGLESv1_dec)
@@ -21,6 +22,7 @@ $(call emugl-export,CFLAGS,$(host_common_debug_CFLAGS))
 
 $(call emugl-end-module)
 
+else # x86_64
 
 ### host library, 64-bit ####################################
 $(call emugl-begin-host-static-library,lib64GLESv1_dec)
@@ -35,3 +37,5 @@ LOCAL_SRC_FILES := GLDecoder.cpp
 $(call emugl-export,CFLAGS,$(host_common_debug_CFLAGS) -m64)
 
 $(call emugl-end-module)
+
+endif

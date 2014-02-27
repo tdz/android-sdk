@@ -1,5 +1,7 @@
 LOCAL_PATH:= $(call my-dir)
 
+ifneq ($(shell uname -m), x86_64)
+
 $(call emugl-begin-host-executable,triangleCM)
 $(call emugl-import,libEGL_translator libGLES_CM_translator)
 
@@ -27,3 +29,5 @@ $(call emugl-import,libMac_view)
 endif
 
 $(call emugl-end-module)
+
+endif

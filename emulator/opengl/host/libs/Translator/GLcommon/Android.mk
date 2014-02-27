@@ -30,6 +30,7 @@ ifeq ($(HOST_OS),windows)
     host_common_LDFLAGS += -Wl,--add-stdcall-alias
 endif
 
+ifneq ($(shell uname -m), x86_64)
 
 ### EGL host implementation ########################
 
@@ -45,6 +46,7 @@ $(call emugl-export,STATIC_LIBRARIES, libcutils libutils liblog)
 
 $(call emugl-end-module)
 
+else # x86_64
 
 ### EGL host implementation, 64-bit ################
 
@@ -59,3 +61,5 @@ $(call emugl-export,C_INCLUDES,$(LOCAL_PATH)/../include $(EMUGL_PATH)/shared)
 $(call emugl-export,STATIC_LIBRARIES, lib64cutils lib64utils lib64log)
 
 $(call emugl-end-module)
+
+endif

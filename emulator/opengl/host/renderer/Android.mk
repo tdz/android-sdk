@@ -1,5 +1,7 @@
 LOCAL_PATH:=$(call my-dir)
 
+ifneq ($(shell uname -m), x86_64)
+
 # host renderer process ###########################
 $(call emugl-begin-host-executable,emulator_renderer)
 $(call emugl-import,libOpenglRender)
@@ -12,3 +14,4 @@ LOCAL_CFLAGS    += -O0 -g
 
 $(call emugl-end-module)
 
+endif
