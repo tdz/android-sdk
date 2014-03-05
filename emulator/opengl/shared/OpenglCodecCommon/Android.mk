@@ -19,7 +19,6 @@ else
     host_commonSources += UnixStream.cpp
 endif
 
-ifneq ($(shell uname -m), x86_64)
 
 ### OpenglCodecCommon  host ##############################################
 $(call emugl-begin-host-static-library,libOpenglCodecCommon)
@@ -30,7 +29,6 @@ $(call emugl-export,STATIC_LIBRARIES,libcutils)
 $(call emugl-export,C_INCLUDES,$(LOCAL_PATH))
 $(call emugl-end-module)
 
-else # x86_64
 
 ### OpenglCodecCommon  host, 64-bit #########################################
 $(call emugl-begin-host-static-library,lib64OpenglCodecCommon)
@@ -42,4 +40,3 @@ $(call emugl-export,C_INCLUDES,$(LOCAL_PATH))
 $(call emugl-export,CFLAGS,-m64)
 $(call emugl-end-module)
 
-endif

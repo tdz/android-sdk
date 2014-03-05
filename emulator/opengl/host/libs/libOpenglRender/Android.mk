@@ -40,8 +40,6 @@ host_common_CFLAGS :=
 #host_common_CFLAGS += -DCHECK_GL_ERROR
 
 
-ifneq ($(shell uname -m), x86_64)
-
 ### host libOpenglRender #################################################
 $(call emugl-begin-host-shared-library,libOpenglRender)
 
@@ -62,7 +60,6 @@ $(call emugl-export,CFLAGS,$(host_common_CFLAGS))
 
 $(call emugl-end-module)
 
-else # x86_64
 
 ### host libOpenglRender, 64-bit #########################################
 $(call emugl-begin-host-shared-library,lib64OpenglRender)
@@ -84,5 +81,3 @@ LOCAL_STATIC_LIBRARIES += lib64utils lib64log
 $(call emugl-export,CFLAGS,$(host_common_CFLAGS) -m64)
 
 $(call emugl-end-module)
-
-endif

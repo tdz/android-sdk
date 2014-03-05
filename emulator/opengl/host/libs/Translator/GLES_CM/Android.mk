@@ -6,7 +6,6 @@ host_common_SRC_FILES := \
      GLEScmContext.cpp   \
      GLEScmValidate.cpp
 
-ifneq ($(shell uname -m), x86_64)
 
 ### GLES_CM host implementation (On top of OpenGL) ########################
 $(call emugl-begin-host-shared-library,libGLES_CM_translator)
@@ -17,7 +16,6 @@ LOCAL_SRC_FILES := $(host_common_SRC_FILES)
 
 $(call emugl-end-module)
 
-else # x86_64
 
 ### GLES_CM host implementation, 64-bit ########################
 $(call emugl-begin-host-shared-library,lib64GLES_CM_translator)
@@ -28,5 +26,3 @@ LOCAL_LDLIBS += -m64
 LOCAL_SRC_FILES := $(host_common_SRC_FILES)
 
 $(call emugl-end-module)
-
-endif

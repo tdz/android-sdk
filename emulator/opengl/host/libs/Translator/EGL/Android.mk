@@ -37,8 +37,6 @@ host_common_SRC_FILES :=      \
      EglDisplay.cpp           \
      ClientAPIExts.cpp
 
-ifneq ($(shell uname -m), x86_64)
-
 ### EGL host implementation ########################
 $(call emugl-begin-host-shared-library,libEGL_translator)
 $(call emugl-import,libGLcommon)
@@ -47,8 +45,6 @@ LOCAL_LDLIBS += $(host_common_LDLIBS)
 LOCAL_SRC_FILES := $(host_common_SRC_FILES)
 
 $(call emugl-end-module)
-
-else # x86_64
 
 ### EGL host implementation, 64-bit ########################
 $(call emugl-begin-host-shared-library,lib64EGL_translator)
@@ -59,4 +55,3 @@ LOCAL_SRC_FILES := $(host_common_SRC_FILES)
 
 $(call emugl-end-module)
 
-endif

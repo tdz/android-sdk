@@ -7,7 +7,6 @@ host_common_SRC_FILES := \
      ShaderParser.cpp    \
      ProgramData.cpp
 
-ifneq ($(shell uname -m), x86_64)
 
 ### GLES_V2 host implementation (On top of OpenGL) ########################
 $(call emugl-begin-host-shared-library,libGLES_V2_translator)
@@ -17,7 +16,6 @@ LOCAL_SRC_FILES := $(host_common_SRC_FILES)
 
 $(call emugl-end-module)
 
-else # x86_64
 
 ### GLES_V2 host implementation, 64-bit ##############################
 $(call emugl-begin-host-shared-library,lib64GLES_V2_translator)
@@ -27,5 +25,3 @@ LOCAL_LDLIBS += -m64
 LOCAL_SRC_FILES := $(host_common_SRC_FILES)
 
 $(call emugl-end-module)
-
-endif
