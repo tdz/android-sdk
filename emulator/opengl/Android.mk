@@ -7,7 +7,7 @@
 # Also define BUILD_EMULATOR_OPENGL_DRIVER to 'true' to build the gralloc
 # stuff as well.
 #
-ifeq (true,$(BUILD_EMULATOR_OPENGL))
+#ifeq (true,$(BUILD_EMULATOR_OPENGL))
 
 # Top-level for all modules
 EMUGL_PATH := $(call my-dir)
@@ -78,4 +78,4 @@ include $(EMUGL_PATH)/tests/translator_tests/MacCommon/Android.mk
 include $(EMUGL_PATH)/tests/translator_tests/GLES_CM/Android.mk
 include $(EMUGL_PATH)/tests/translator_tests/GLES_V2/Android.mk
 
-endif # BUILD_EMULATOR_OPENGL == true
+#endif # BUILD_EMULATOR_OPENGL == true
