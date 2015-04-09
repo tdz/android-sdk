@@ -1786,6 +1786,13 @@ GL_APICALL void  GL_APIENTRY glTexImage2D(GLenum target, GLint level, GLint inte
         type = GL_HALF_FLOAT_NV;
     if (pixels==NULL && type==GL_UNSIGNED_SHORT_5_5_5_1)
         type = GL_UNSIGNED_SHORT;
+    if (internalformat == GL_BGRA_EXT) {
+        // On non-ES OpenGL, contrary to OpenGL ES, internalformat cannot be BGRA;
+        // instead, one is supposed to use internalformat=RGBA with format=BGRA.
+        // This code assumes non-ES OpenGL; will have to be avoided if ever ported
+        // to OpenGL ES.
+        internalformat = GL_RGBA;
+    }
     ctx->dispatcher().glTexImage2D(target,level,internalformat,width,height,border,format,type,pixels);
 }
 
